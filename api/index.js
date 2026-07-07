@@ -9,34 +9,44 @@ app.use(express.json());
 // ============================================================
 // KONFIGURASI PROVIDER
 // ============================================================
-// Untuk DEMO ini pakai API publik gratis (lfourr) sebagai proof-of-concept.
-// Untuk PRODUCTION, ganti isi callProvider() dengan provider resmi:
-// Api.co.id / Xendit Data Services / Duitku, dll.
+// Menggunakan Api.co.id (Indonesia Bank Validation API) — provider resmi,
+// aktif, dan reliable. Daftar gratis di api.co.id untuk dapat API key.
+// Set API key di Vercel: Project > Settings > Environment Variables
+// dengan nama API_CO_ID_KEY.
+//
+// CATATAN: cek dokumentasi resmi di dashboard api.co.id untuk base URL
+// yang berlaku saat ini (bisa berubah), dan sesuaikan endpoint di bawah
+// kalau perlu.
 // ============================================================
 
-const DEMO_BASE_URL = 'https://api-rekening.lfourr.com';
+const API_CO_ID_BASE_URL = process.env.API_CO_ID_BASE_URL || 'https://use.api.co.id';
+const API_CO_ID_KEY = process.env.API_CO_ID_KEY;
 
-async function callProvider({ type, bankCode, accountNumber }) {
-  const endpoint = type === 'ewallet' ? '/getEwalletAccount' : '/getBankAccount';
-  const { data } = await axios.get(`${DEMO_BASE_URL}${endpoint}`, {
-    params: { bankCode, accountNumber },
+async function callProvider({ bankCode, accountNumber, accountName }) {
+  const { data } = await axios.get(`${API_CO_ID_BASE_URL}/validation/bank`, {
+    params: {
+      bank_code: bankCode,
+      account_number: accountNumber,
+      account_name: accountName || '',
+    },
+    headers: { 'x-api-co-id': API_CO_ID_KEY },
     timeout: 10000,
   });
   return data;
 }
 
 // CATATAN: cache in-memory di bawah ini HANYA berguna selama function
-// masih "warm" (belum cold start). Untuk production di Vercel, ganti
-// dengan Redis (misal Upstash, ada free tier & native support Vercel).
+// masih "warm" (belum cold start). Untuk production, ganti dengan Redis
+// (misal Upstash, ada free tier & native support Vercel).
 const cache = new Map();
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 
-function getCacheKey(type, bankCode, accountNumber) {
-  return `${type}:${bankCode}:${accountNumber}`;
+function getCacheKey(bankCode, accountNumber) {
+  return `${bankCode}:${accountNumber}`;
 }
 
 app.post('/api/cek-rekening', async (req, res) => {
-  const { bankCode, accountNumber, type } = req.body;
+  const { bankCode, accountNumber, accountName } = req.body;
 
   if (!bankCode || !accountNumber) {
     return res.status(400).json({
@@ -45,8 +55,14 @@ app.post('/api/cek-rekening', async (req, res) => {
     });
   }
 
-  const inquiryType = type === 'ewallet' ? 'ewallet' : 'bank';
-  const cacheKey = getCacheKey(inquiryType, bankCode, accountNumber);
+  if (!API_CO_ID_KEY) {
+    return res.status(500).json({
+      valid: false,
+      message: 'API_CO_ID_KEY belum di-set di environment variables Vercel',
+    });
+  }
+
+  const cacheKey = getCacheKey(bankCode, accountNumber);
   const cached = cache.get(cacheKey);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
@@ -54,17 +70,14 @@ app.post('/api/cek-rekening', async (req, res) => {
   }
 
   try {
-    const providerResult = await callProvider({
-      type: inquiryType,
-      bankCode,
-      accountNumber,
-    });
+    const providerResult = await callProvider({ bankCode, accountNumber, accountName });
 
     const normalized = {
-      valid: Boolean(providerResult?.status === true || providerResult?.name),
-      accountName: providerResult?.name || providerResult?.account_name || null,
-      bankName: providerResult?.bank_name || providerResult?.bankName || bankCode,
+      valid: Boolean(providerResult?.data?.is_valid),
+      accountName: providerResult?.data?.name || null,
+      bankName: bankCode,
       accountNumber,
+      note: providerResult?.data?.note || null,
       raw: providerResult,
     };
 
@@ -74,15 +87,13 @@ app.post('/api/cek-rekening', async (req, res) => {
     res.status(502).json({
       valid: false,
       message: 'Gagal menghubungi provider validasi rekening',
-      detail: err.message,
+      detail: err.response?.data || err.message,
     });
   }
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.json({ status: 'ok', time: new Date().toISOString(), providerConfigured: Boolean(API_CO_ID_KEY) });
 });
 
-// PENTING: jangan pakai app.listen() di Vercel — cukup export app-nya,
-// Vercel yang akan handle request lifecycle-nya.
 module.exports = app;
