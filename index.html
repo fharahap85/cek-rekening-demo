@@ -13,16 +13,25 @@
     padding: 40px 20px;
     color: #1a1a1a;
   }
+  .wrap { max-width: 480px; margin: 0 auto; }
   .card {
-    max-width: 480px;
-    margin: 0 auto;
     background: white;
     border-radius: 12px;
     padding: 32px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
   }
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  p.sub { color: #666; font-size: 14px; margin-top: 0; margin-bottom: 24px; }
+  .badge {
+    display: inline-block;
+    background: #fef3c7;
+    color: #92400e;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 12px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { color: #666; font-size: 14px; margin-top: 0; margin-bottom: 20px; }
   label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; margin-top: 16px; }
   select, input {
     width: 100%;
@@ -50,18 +59,48 @@
     border-radius: 8px;
     font-size: 14px;
     display: none;
-    white-space: pre-wrap;
   }
   #result.valid { background: #ecfdf3; border: 1px solid #6ce9a6; display: block; }
   #result.invalid { background: #fef3f2; border: 1px solid #fda29b; display: block; }
   .row { display: flex; justify-content: space-between; margin-bottom: 6px; }
   .row b { text-align: right; }
+
+  .samples {
+    margin-top: 16px;
+    background: white;
+    border-radius: 12px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  .samples h2 { font-size: 14px; margin: 0 0 12px; color: #374151; }
+  .sample-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f1f3;
+    font-size: 13px;
+  }
+  .sample-item:last-child { border-bottom: none; }
+  .sample-item .label { color: #374151; }
+  .sample-item .label small { display: block; color: #9ca3af; font-size: 11px; }
+  .sample-item button {
+    width: auto;
+    margin: 0;
+    padding: 6px 12px;
+    font-size: 12px;
+    background: #eef2ff;
+    color: #4338ca;
+  }
+  .sample-item button:hover { background: #e0e7ff; }
 </style>
 </head>
 <body>
+<div class="wrap">
   <div class="card">
+    <span class="badge">🧪 Mode Demo / Simulasi</span>
     <h1>🏦 Demo API Cek Rekening / E-Wallet</h1>
-    <p class="sub">Input nomor rekening dan kode bank, sistem akan cek nama pemilik & validitas secara real-time.</p>
+    <p class="sub">Input nomor rekening dan kode bank, sistem akan cek nama pemilik & validitas. Coba salah satu contoh di bawah, atau isi manual.</p>
 
     <label>Tipe</label>
     <select id="type">
@@ -80,7 +119,36 @@
     <div id="result"></div>
   </div>
 
+  <div class="samples">
+    <h2>💡 Contoh nomor untuk dicoba (klik "Pakai")</h2>
+    <div id="sampleList">Memuat contoh...</div>
+  </div>
+</div>
+
 <script>
+async function loadSamples() {
+  try {
+    const res = await fetch('/api/sample-accounts');
+    const data = await res.json();
+    const container = document.getElementById('sampleList');
+    container.innerHTML = data.samples.map((s, i) => `
+      <div class="sample-item">
+        <span class="label">${s.bankName} — ${s.accountNumber}<small>${s.type === 'ewallet' ? 'E-Wallet' : 'Bank'}</small></span>
+        <button onclick="fillSample('${s.type}','${s.bankCode}','${s.accountNumber}')">Pakai</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    document.getElementById('sampleList').textContent = 'Gagal memuat contoh.';
+  }
+}
+
+function fillSample(type, bankCode, accountNumber) {
+  document.getElementById('type').value = type;
+  document.getElementById('bankCode').value = bankCode;
+  document.getElementById('accountNumber').value = accountNumber;
+  cekRekening();
+}
+
 async function cekRekening() {
   const btn = document.getElementById('submitBtn');
   const type = document.getElementById('type').value;
@@ -121,6 +189,8 @@ async function cekRekening() {
     btn.textContent = 'Cek Sekarang';
   }
 }
+
+loadSamples();
 </script>
 </body>
 </html>
