@@ -19,7 +19,7 @@ app.use(express.json());
 // kalau perlu.
 // ============================================================
 
-const API_CO_ID_BASE_URL = process.env.API_CO_ID_BASE_URL || 'https://use.api.co.id';
+const API_CO_ID_BASE_URL = process.env.API_CO_ID_BASE_URL || 'https://use.api.co.id/validation';
 const API_CO_ID_KEY = process.env.API_CO_ID_KEY;
 
 async function callProvider({ bankCode, accountNumber, accountName }) {
